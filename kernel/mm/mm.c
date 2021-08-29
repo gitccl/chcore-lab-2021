@@ -22,7 +22,7 @@ extern unsigned long *img_end;
 #define PHYSICAL_MEM_START (24*1024*1024)	//24M
 
 #define START_VADDR phys_to_virt(PHYSICAL_MEM_START)	//24M
-#define NPAGES (128*1000)
+#define NPAGES (128*1000) // 500M
 
 #define PHYSICAL_MEM_END (PHYSICAL_MEM_START+NPAGES*BUDDY_PAGE_SIZE)
 
@@ -78,6 +78,8 @@ void mm_init(void)
 	    phys_to_virt(ROUND_UP((vaddr_t) (&img_end), PAGE_SIZE));
 	npages = NPAGES;
 	start_vaddr = START_VADDR;
+	// free_mem_start(page_meta_start) - start_vaddr(24M) --> page meta data
+	// start_vaddr(24M) - physical_mem_end(500M + 24M) -> used for allocate
 	kdebug("[CHCORE] mm: free_mem_start is 0x%lx, free_mem_end is 0x%lx\n",
 	       free_mem_start, phys_to_virt(PHYSICAL_MEM_END));
 

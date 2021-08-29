@@ -21,7 +21,7 @@
 #define BUG_ON(expr) \
 	do { \
 		if ((expr)) { \
-			printk("BUG: %s:%d %s\n", __func__, __LINE__, #expr); \
+			printk("BUG: %s:%d %s\n", __FILE__, __LINE__, #expr); \
 			for (;;) { \
 			} \
 		} \

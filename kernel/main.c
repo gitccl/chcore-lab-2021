@@ -42,7 +42,7 @@ void main(void *addr)
 	kinfo("Address of main() is 0x%lx\n", main);
 	kinfo("123456 decimal is 0%o octal\n", 123456);
 
-	stack_test(5);
+	// stack_test(5);
 
 	mm_init();
 	kinfo("mm init finished\n");
