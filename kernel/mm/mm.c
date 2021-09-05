@@ -16,6 +16,7 @@
 
 #include "buddy.h"
 #include "slab.h"
+#include "page_table.h"
 
 extern unsigned long *img_end;
 
@@ -25,6 +26,9 @@ extern unsigned long *img_end;
 #define NPAGES (128*1000) // 500M
 
 #define PHYSICAL_MEM_END (PHYSICAL_MEM_START+NPAGES*BUDDY_PAGE_SIZE)
+
+int get_next_ptp(ptp_t * cur_ptp, u32 level, vaddr_t va,
+			ptp_t ** next_ptp, pte_t ** pte, bool alloc);
 
 /*
  * Layout:
@@ -51,6 +55,32 @@ unsigned long get_ttbr1(void)
 void map_kernel_space(vaddr_t va, paddr_t pa, size_t len)
 {
 	// <lab2>
+	#define BLOCK_SIZE (1 << 21)
+	vaddr_t *pgd = (vaddr_t *)get_ttbr1();
+	ptp_t *next_ptp;
+	pte_t *pte;
+	int ret, index;
+	for(vaddr_t end = va + len; va < end; va += BLOCK_SIZE, pa += BLOCK_SIZE) {
+		ret = get_next_ptp((ptp_t *)pgd, 0, va, &next_ptp, &pte, true);
+		BUG_ON(ret < 0);
+		ret = get_next_ptp(next_ptp, 1, va, &next_ptp, &pte, true);
+		BUG_ON(ret < 0);
+
+		index = GET_L2_INDEX(va);
+		pte = &(next_ptp->ent[index]);
+		
+		pte->l2_block.is_valid = 1;
+		pte->l2_block.is_table = 0;
+
+		pte->l2_block.pfn = pa >> L2_INDEX_SHIFT;
+
+		pte->l2_block.AP = 0; // EL0 cannot access
+		pte->l2_block.UXN = AARCH64_PTE_UXN;
+		pte->l2_block.AF = AARCH64_PTE_AF_ACCESSED;
+		pte->l2_block.SH = INNER_SHAREABLE;
+		pte->l2_block.attr_index = NORMAL_MEMORY;
+	}
+
 
 	// </lab2>
 }

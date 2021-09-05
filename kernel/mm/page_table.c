@@ -84,7 +84,7 @@ static int set_pte_flags(pte_t * entry, vmr_prop_t flags, int kind)
  * alloc: if true, allocate a ptp when missing
  *
  */
-static int get_next_ptp(ptp_t * cur_ptp, u32 level, vaddr_t va,
+int get_next_ptp(ptp_t * cur_ptp, u32 level, vaddr_t va,
 			ptp_t ** next_ptp, pte_t ** pte, bool alloc)
 {
 	u32 index = 0;
@@ -162,6 +162,40 @@ static int get_next_ptp(ptp_t * cur_ptp, u32 level, vaddr_t va,
 int query_in_pgtbl(vaddr_t * pgtbl, vaddr_t va, paddr_t * pa, pte_t ** entry)
 {
 	// <lab2>
+	ptp_t *next_ptp;
+	pte_t *pte;
+	int ret;
+	next_ptp = (ptp_t *)pgtbl;
+	ret = get_next_ptp(next_ptp, 0, va, &next_ptp, &pte, false);
+	if(ret < 0) 
+		return ret;
+
+	ret = get_next_ptp(next_ptp, 1, va, &next_ptp, &pte, false); 
+	if(ret < 0) 
+		return ret;
+	if(ret == BLOCK_PTP) {
+		*entry = pte;
+		*pa = (pte->l1_block.pfn << L1_INDEX_SHIFT) + GET_VA_OFFSET_L1(va);
+		return 0;
+	}
+
+	ret = get_next_ptp(next_ptp, 2, va, &next_ptp, &pte, false); 
+	if(ret < 0) 
+		return ret;
+	if(ret == BLOCK_PTP) {
+		*entry = pte;
+		*pa = (pte->l1_block.pfn << L2_INDEX_SHIFT) + GET_VA_OFFSET_L2(va);
+		return 0;
+	}
+
+
+	ret = get_next_ptp(next_ptp, 3, va, &next_ptp, &pte, false); 
+	if(ret < 0) 
+		return ret;
+	
+	BUG_ON(!pte->l3_page.is_page); // must be a block(page)
+	*entry = pte;
+	*pa = (pte->l3_page.pfn << L3_INDEX_SHIFT) + GET_VA_OFFSET_L3(va);
 
 	// </lab2>
 	return 0;
@@ -186,7 +220,30 @@ int map_range_in_pgtbl(vaddr_t * pgtbl, vaddr_t va, paddr_t pa,
 		       size_t len, vmr_prop_t flags)
 {
 	// <lab2>
+	BUG_ON(len % PAGE_SIZE);  
+	ptp_t *next_ptp;
+	pte_t *pte;
+	int ret, index;
+	for(vaddr_t i = va; i < va + len; i += PAGE_SIZE, pa += PAGE_SIZE) {
+		next_ptp = (ptp_t *)pgtbl;
+		ret = get_next_ptp(next_ptp, 0, i, &next_ptp, &pte, true);
+		BUG_ON(ret < 0);
+		ret = get_next_ptp(next_ptp, 1, i, &next_ptp, &pte, true); 
+		BUG_ON(ret < 0);
+		ret = get_next_ptp(next_ptp, 2, i, &next_ptp, &pte, true); 
+		BUG_ON(ret < 0);
 
+		index = GET_L3_INDEX(i);
+		pte = &(next_ptp->ent[index]);
+		BUG_ON(!IS_PTE_INVALID(pte->pte)); // bug_on haved already been mapped
+		
+		set_pte_flags(pte, flags, i >= KBASE ? KERNEL_PTE : USER_PTE);
+		pte->l3_page.pfn = pa >> PAGE_SHIFT;
+		pte->l3_page.is_page = 1;
+		pte->l3_page.is_valid = 1; // valid
+	}
+
+	printk("23");
 	// </lab2>
 	return 0;
 }
@@ -207,7 +264,24 @@ int map_range_in_pgtbl(vaddr_t * pgtbl, vaddr_t va, paddr_t pa,
 int unmap_range_in_pgtbl(vaddr_t * pgtbl, vaddr_t va, size_t len)
 {
 	// <lab2>
+	BUG_ON(len % PAGE_SIZE); 
+	ptp_t *next_ptp;
+	pte_t *pte;
+	int ret;
+	for(vaddr_t i = va; i < va + len; i += PAGE_SIZE) {
+		next_ptp = (ptp_t *)pgtbl;
+		ret = get_next_ptp(next_ptp, 0, i, &next_ptp, &pte, true);
+		BUG_ON(ret < 0);
+		ret = get_next_ptp(next_ptp, 1, i, &next_ptp, &pte, true); 
+		BUG_ON(ret < 0);
+		ret = get_next_ptp(next_ptp, 2, i, &next_ptp, &pte, true); 
+		BUG_ON(ret < 0);
+		ret = get_next_ptp(next_ptp, 3, i, &next_ptp, &pte, true); 
+		BUG_ON(ret < 0);
+		pte->pte = 0;
+	}
 
+	flush_tlb();
 	// </lab2>
 	return 0;
 }
